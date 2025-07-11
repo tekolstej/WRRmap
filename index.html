@@ -7,12 +7,27 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <style>
     #map { height: 100vh; }
+    .popup-title {
+      font-weight: bold;
+      font-size: 16px;
+      text-align: center;
+      margin-bottom: 8px;
+    }
+    .section {
+      border: 1px solid #ccc;
+      padding: 4px 8px;
+      margin-top: 6px;
+      background-color: #f9f9f9;
+    }
+    .section-title {
+      font-weight: bold;
+      margin-bottom: 2px;
+    }
   </style>
 </head>
 <body>
   <div id="map"></div>
 
-  <!-- Leaflet and PapaParse -->
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
 
@@ -23,41 +38,60 @@
       maxZoom: 18,
     }).addTo(map);
 
+    const greenIcon = new L.Icon({
+      iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png',
+      shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+      iconSize: [25, 41],
+      iconAnchor: [12, 41],
+      popupAnchor: [1, -34],
+      shadowSize: [41, 41]
+    });
+
+    const yellowIcon = new L.Icon({
+      iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-yellow.png',
+      shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+      iconSize: [25, 41],
+      iconAnchor: [12, 41],
+      popupAnchor: [1, -34],
+      shadowSize: [41, 41]
+    });
+
     Papa.parse('sites.csv', {
       download: true,
       header: true,
       complete: function(results) {
         results.data.forEach(row => {
           if (row.latitude && row.longitude) {
+            const species = row.sampled || 'N/A';
             const popupContent = `
-              <div style="text-align: center; font-size: 18px; font-weight: bold; margin-bottom: 8px;">
-                ${row.id}
-              </div>
-
-              <div style="border: 1px solid #ccc; padding: 6px; margin-bottom: 8px;">
-                <b>Site Information</b><br>
+              <div class="popup-title">${row.id}</div>
+              <div class="section">
+                <div class="section-title">Site Information</div>
                 <b>Latitude:</b> ${row.latitude}<br>
                 <b>Longitude:</b> ${row.longitude}<br>
-                <b>Elevation:</b> ${row.elevation} ft<br>
+                <b>Elevation:</b> ${row.elevation || 'N/A'} ft<br>
                 <b>Comments:</b> ${row.comments || 'N/A'}
               </div>
-
-              <div style="border: 1px solid #ccc; padding: 6px;">
-                <b>Sample Information</b><br>
-                <b>Date:</b> ${row.date || 'N/A'}<br>
-                <b>Time:</b> ${row.time || 'N/A'}<br>
-                <b>Species:</b> ${row.tree_sampled || 'N/A'}<br>
-                <b>CBH:</b> ${row.cbh || 'N/A'} cm<br>
-                <b>Soil Temp:</b> ${row.soil_temp || 'N/A'} °C<br>
-                <b>Soil Moisture:</b> ${row.soil_moisture || 'N/A'} %<br>
-                <b>Soil pH:</b> ${row.soil_ph || 'N/A'}
+              <div class="section">
+                <div class="section-title">Sample Information</div>
+                <b>Date:</b> ${row.date}<br>
+                <b>Time:</b> ${row.time}<br>
+                <b>Species:</b> ${species}<br>
+                <b>CBH:</b> ${row.cbh} cm<br>
+                <b>Soil Temp:</b> ${row.soil_temp} °C<br>
+                <b>Soil Moisture:</b> ${row.soil_moisture} %<br>
+                <b>Soil pH:</b> ${row.soil_ph}
               </div>
             `;
 
-            L.marker([
-              parseFloat(row.latitude),
-              parseFloat(row.longitude)
-            ])
+            let markerIcon = L.icon(); // default
+            if (species === "Lodgepole Pine") {
+              markerIcon = greenIcon;
+            } else if (species === "Aspen") {
+              markerIcon = yellowIcon;
+            }
+
+            L.marker([parseFloat(row.latitude), parseFloat(row.longitude)], { icon: markerIcon })
               .addTo(map)
               .bindPopup(popupContent);
           }
