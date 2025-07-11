@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Wind River Sampling Map</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    #map { height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <!-- Load Leaflet and PapaParse -->
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+
+  <script>
+    const map = L.map('map').setView([42.6, -109.1], 9);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18,
+    }).addTo(map);
+
+    Papa.parse('sites.csv', {
+      download: true,
+      header: true,
+      complete: function(results) {
+        results.data.forEach(row => {
+          if (row.latitude && row.longitude) {
+            const popupContent = `
+              <b>Sample ID:</b> ${row.id}<br>
+              <b>Tree Species:</b> ${row.sampled}<br>
+              <b>Region:</b> ${row.region}<br>
+              <b>Elevation Class:</b> ${row.elevation}<br>
+              <b>Site:</b> ${row.site}<br>
+              <b>Horizon:</b> ${row.horizon}<br>
+              <b>Date:</b> ${row.date}<br>
+              <b>Time:</b> ${row.time}<br>
+              <b>CBH:</b> ${row.cbh} cm<br>
+              <b>Latitude:</b> ${row.latitude}<br>
+              <b>Longitude:</b> ${row.longitude}<br>
+              <b>Elevation:</b> ${row.elevation_ft} ft<br>
+              <b>Conditions:</b> ${row.env_conditions}<br>
+              <b>Comments:</b> ${row.comments}<br>
+              <b>Soil Temp:</b> ${row.soil_temp} °C<br>
+              <b>Soil Moisture:</b> ${row.soil_moisture} %<br>
+              <b>Light:</b> ${row.light} lux<br>
+              <b>Air Temp:</b> ${row.air_temp} °C
+            `;
+            L.marker([parseFloat(row.latitude), parseFloat(row.longitude)])
+              .addTo(map)
+              .bindPopup(popupContent);
+          }
+        });
+      }
+    });
+  </script>
+</body>
+</html>
+
