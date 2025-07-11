@@ -22,7 +22,7 @@
       maxZoom: 18,
     }).addTo(map);
 
-    Papa.parse('sites.csv', {
+    Papa.parse('https://raw.githubusercontent.com/tekolstej/WRRmap/main/sites.csv', {
       download: true,
       header: true,
       complete: function(results) {
