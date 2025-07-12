@@ -37,40 +37,37 @@
   <script>
     const map = L.map("map").setView([42.6, -109.2], 10);
 
-    // Esri Satellite Imagery basemap
-    L.tileLayer(
-      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{x}/{y}", {
-        attribution:
-          'Tiles © Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
-        maxZoom: 19,
-      }
-    ).addTo(map);
+    // ✅ Reliable Esri satellite basemap via leaflet-providers
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{x}/{y}', {
+      attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Earthstar Geographics',
+      maxZoom: 19
+    }).addTo(map);
 
-    // Font Awesome marker icons by species
+    // Font Awesome icons per species
     const icons = {
       "Lodgepole Pine": L.divIcon({
-        html: '<i class="fas fa-tree" style="color:green;font-size:24px;"></i>',
-        iconSize: [24, 24],
-        className: "leaflet-div-icon"
+        html: '<i class="fas fa-tree" style="color:green;font-size:22px;"></i>',
+        className: 'leaflet-div-icon',
+        iconSize: [22, 22]
       }),
       "Aspen": L.divIcon({
-        html: '<i class="fas fa-leaf" style="color:goldenrod;font-size:24px;"></i>',
-        iconSize: [24, 24],
-        className: "leaflet-div-icon"
+        html: '<i class="fas fa-leaf" style="color:goldenrod;font-size:22px;"></i>',
+        className: 'leaflet-div-icon',
+        iconSize: [22, 22]
       }),
       "Meadow": L.divIcon({
-        html: '<i class="fas fa-seedling" style="color:olive;font-size:24px;"></i>',
-        iconSize: [24, 24],
-        className: "leaflet-div-icon"
+        html: '<i class="fas fa-seedling" style="color:darkolivegreen;font-size:22px;"></i>',
+        className: 'leaflet-div-icon',
+        iconSize: [22, 22]
       }),
       "default": L.divIcon({
-        html: '<i class="fas fa-map-marker-alt" style="color:gray;font-size:24px;"></i>',
-        iconSize: [24, 24],
-        className: "leaflet-div-icon"
+        html: '<i class="fas fa-map-marker-alt" style="color:gray;font-size:22px;"></i>',
+        className: 'leaflet-div-icon',
+        iconSize: [22, 22]
       })
     };
 
-    // Load the CSV from GitHub
+    // Load your CSV file hosted on GitHub
     const csvUrl = "https://raw.githubusercontent.com/tekolstej/WRRmap/main/sites.csv";
 
     Papa.parse(csvUrl, {
@@ -82,20 +79,18 @@
 
           const lat = parseFloat(row.latitude);
           const lng = parseFloat(row.longitude);
-          const species = row.sampled || "default";
+          const species = row.sampled?.trim() || "default";
           const icon = icons[species] || icons["default"];
 
-          const popupContent = `
+          const popup = `
             <div class="popup-header">${row.id}</div>
             <div class="info-box">
-              <b>Site Information</b><br>
               <b>Latitude:</b> ${row.latitude}<br>
               <b>Longitude:</b> ${row.longitude}<br>
               <b>Elevation:</b> ${row.elevation || "N/A"} ft<br>
               <b>Comments:</b> ${row.comments || "N/A"}
             </div>
             <div class="info-box">
-              <b>Sample Information</b><br>
               <b>Date:</b> ${row.date}<br>
               <b>Time:</b> ${row.time}<br>
               <b>Species:</b> ${species}<br>
@@ -106,8 +101,7 @@
             </div>
           `;
 
-          L.marker([lat, lng], { icon: icon }).addTo(map)
-            .bindPopup(popupContent);
+          L.marker([lat, lng], { icon: icon }).addTo(map).bindPopup(popup);
         });
       }
     });
