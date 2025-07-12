@@ -10,10 +10,14 @@
   />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
-  <script src="https://kit.fontawesome.com/a2e0c1d52c.js" crossorigin="anonymous"></script>
+  <script src="https://kit.fontawesome.com/2d64a4b9e1.js" crossorigin="anonymous"></script>
   <style>
     #map {
       height: 100vh;
+    }
+    .leaflet-div-icon {
+      background: transparent;
+      border: none;
     }
     .popup-header {
       text-align: center;
@@ -33,34 +37,41 @@
   <script>
     const map = L.map("map").setView([42.6, -109.2], 10);
 
-    // Terrain-style basemap
-    L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", {
-      maxZoom: 17,
-      attribution:
-        'Map data © <a href="https://opentopomap.org">OpenTopoMap</a>, © OpenStreetMap contributors',
-    }).addTo(map);
+    // Esri Satellite Imagery basemap
+    L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{x}/{y}", {
+        attribution:
+          'Tiles © Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+        maxZoom: 19,
+      }
+    ).addTo(map);
 
-    // Icon setup
+    // Font Awesome marker icons by species
     const icons = {
       "Lodgepole Pine": L.divIcon({
         html: '<i class="fas fa-tree" style="color:green;font-size:24px;"></i>',
         iconSize: [24, 24],
-        className: 'leaflet-div-icon'
+        className: "leaflet-div-icon"
       }),
       "Aspen": L.divIcon({
         html: '<i class="fas fa-leaf" style="color:goldenrod;font-size:24px;"></i>',
         iconSize: [24, 24],
-        className: 'leaflet-div-icon'
+        className: "leaflet-div-icon"
       }),
       "Meadow": L.divIcon({
         html: '<i class="fas fa-seedling" style="color:olive;font-size:24px;"></i>',
         iconSize: [24, 24],
-        className: 'leaflet-div-icon'
+        className: "leaflet-div-icon"
+      }),
+      "default": L.divIcon({
+        html: '<i class="fas fa-map-marker-alt" style="color:gray;font-size:24px;"></i>',
+        iconSize: [24, 24],
+        className: "leaflet-div-icon"
       })
     };
 
-    // Load CSV from GitHub
-    const csvUrl = "https://raw.githubusercontent.com/tekolstej/WRRmap/main/sites1.csv";
+    // Load the CSV from GitHub
+    const csvUrl = "https://raw.githubusercontent.com/tekolstej/WRRmap/main/sites.csv";
 
     Papa.parse(csvUrl, {
       download: true,
@@ -71,8 +82,8 @@
 
           const lat = parseFloat(row.latitude);
           const lng = parseFloat(row.longitude);
-          const species = row.sampled || "N/A";
-          const icon = icons[species] || icons["Meadow"];
+          const species = row.sampled || "default";
+          const icon = icons[species] || icons["default"];
 
           const popupContent = `
             <div class="popup-header">${row.id}</div>
