@@ -4,7 +4,14 @@
   <meta charset="utf-8" />
   <title>Wind River Sampling Map</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+
+  <!-- MarkerCluster CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css" />
+
   <style>
     #map {
       height: 100vh;
@@ -23,14 +30,20 @@
 <body>
   <div id="map"></div>
 
+  <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+  <!-- Leaflet.markercluster JS -->
+  <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
+
+  <!-- PapaParse JS -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
 
   <script>
     // Initialize map
     const map = L.map('map').setView([42.7, -109.3], 9);
 
-    // Add OpenStreetMap tile layer
+    // Add tile layer
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
@@ -56,6 +69,9 @@
         popupAnchor: [0, -37]
       })
     };
+
+    // Create a marker cluster group
+    const markerCluster = L.markerClusterGroup();
 
     // Load CSV
     fetch('sites1.csv')
@@ -94,12 +110,12 @@
                   </div>
                 `;
 
-                const marker = L.marker([lat, lon], { icon }).addTo(map);
+                const marker = L.marker([lat, lon], { icon });
                 marker.bindPopup(popupContent);
 
-                // Add hover delay for tooltip
+                // Hover tooltip after 1s delay
                 let hoverTimeout;
-                marker.on('mouseover', function () {
+                marker.on('mouseover', () => {
                   hoverTimeout = setTimeout(() => {
                     marker.bindTooltip(site.id, {
                       permanent: false,
@@ -108,15 +124,19 @@
                       opacity: 0.9,
                       className: 'custom-tooltip'
                     }).openTooltip();
-                  }, 1000); // show after 1 second
+                  }, 1000);
                 });
 
-                marker.on('mouseout', function () {
+                marker.on('mouseout', () => {
                   clearTimeout(hoverTimeout);
                   marker.closeTooltip();
                 });
+
+                markerCluster.addLayer(marker);
               }
             });
+
+            map.addLayer(markerCluster);
           }
         });
       });
