@@ -19,33 +19,62 @@
   <script>
     const map = L.map('map').setView([42.6, -109.15], 9);
 
-    // Basic OSM tiles
+    // OSM base map
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
-    // Load CSV
+    // Define species icons
+    const icons = {
+      "Lodgepole Pine": L.icon({
+        iconUrl: "icons/lp.jpeg",
+        iconSize: [30, 40],
+        iconAnchor: [15, 40],
+        popupAnchor: [0, -40]
+      }),
+      "Aspen": L.icon({
+        iconUrl: "icons/asp.jpeg",
+        iconSize: [30, 40],
+        iconAnchor: [15, 40],
+        popupAnchor: [0, -40]
+      }),
+      "Meadow": L.icon({
+        iconUrl: "icons/mdo.jpeg",
+        iconSize: [30, 40],
+        iconAnchor: [15, 40],
+        popupAnchor: [0, -40]
+      })
+    };
+
+    // Parse and plot CSV
     Papa.parse("sites1.csv", {
       header: true,
       download: true,
       complete: function(results) {
-        console.log("CSV parsed:", results.data);
-
         results.data.forEach((row, index) => {
           const lat = parseFloat(row.latitude);
           const lng = parseFloat(row.longitude);
+          const species = row.sampled;
 
           if (isNaN(lat) || isNaN(lng)) {
-            console.warn(`Skipping row ${index + 2} — bad coordinates:`, row);
+            console.warn(`Row ${index + 2} skipped due to bad coordinates`, row);
             return;
           }
 
-          L.marker([lat, lng]).addTo(map)
-            .bindPopup(`<strong>${row.sampled || "Unknown"}</strong><br>${row.comments || ""}`);
+          const marker = L.marker([lat, lng], {
+            icon: icons[species] || L.Icon.Default.prototype
+          }).addTo(map);
+
+          marker.bindPopup(`
+            <strong>${row.id}</strong><br>
+            Species: ${species}<br>
+            Elevation: ${row.elevation} ft<br>
+            ${row.comments || ""}
+          `);
         });
       },
       error: function(err) {
-        console.error("CSV load failed:", err);
+        console.error("CSV loading error:", err);
       }
     });
   </script>
