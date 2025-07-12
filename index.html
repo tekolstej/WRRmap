@@ -1,82 +1,99 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
   <meta charset="utf-8" />
   <title>Wind River Sampling Map</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <style>
-    html, body { height: 100%; margin: 0; padding: 0; }
-    #map { width: 100%; height: 100vh; }
+    #map {
+      height: 100vh;
+    }
   </style>
 </head>
 <body>
   <div id="map"></div>
 
-  <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
 
   <script>
-    const map = L.map('map').setView([42.6, -109.15], 9);
+    // Initialize map
+    const map = L.map('map').setView([42.7, -109.3], 9);
 
-    // OSM base map
+    // Add OpenStreetMap tile layer
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
-    // Define species icons
+    // Define custom icons
     const icons = {
-      "Lodgepole Pine": L.icon({
-        iconUrl: "icons/lp.png",
-        iconSize: [30, 40],
-        iconAnchor: [15, 40],
-        popupAnchor: [0, -40]
+      'Lodgepole Pine': L.icon({
+        iconUrl: 'icons/lp.png',
+        iconSize: [32, 37],
+        iconAnchor: [16, 37],
+        popupAnchor: [0, -37]
       }),
-      "Aspen": L.icon({
-        iconUrl: "icons/asp.png",
-        iconSize: [30, 40],
-        iconAnchor: [15, 40],
-        popupAnchor: [0, -40]
+      'Aspen': L.icon({
+        iconUrl: 'icons/asp.png',
+        iconSize: [32, 37],
+        iconAnchor: [16, 37],
+        popupAnchor: [0, -37]
       }),
-      "Meadow": L.icon({
-        iconUrl: "icons/medo.png",
-        iconSize: [30, 40],
-        iconAnchor: [15, 40],
-        popupAnchor: [0, -40]
+      'Meadow': L.icon({
+        iconUrl: 'icons/medo.png',
+        iconSize: [32, 37],
+        iconAnchor: [16, 37],
+        popupAnchor: [0, -37]
       })
     };
 
-    // Parse and plot CSV
-    Papa.parse("sites1.csv", {
-      header: true,
-      download: true,
-      complete: function(results) {
-        results.data.forEach((row, index) => {
-          const lat = parseFloat(row.latitude);
-          const lng = parseFloat(row.longitude);
-          const species = row.sampled;
+    // Load CSV
+    fetch('sites1.csv')
+      .then(response => response.text())
+      .then(csvText => {
+        Papa.parse(csvText, {
+          header: true,
+          skipEmptyLines: true,
+          complete: function(results) {
+            results.data.forEach(site => {
+              const lat = parseFloat(site.latitude);
+              const lon = parseFloat(site.longitude);
 
-          if (isNaN(lat) || isNaN(lng)) {
-            console.warn(`Row ${index + 2} skipped due to bad coordinates`, row);
-            return;
+              if (!isNaN(lat) && !isNaN(lon)) {
+                const icon = icons[site.sampled] || L.Icon.Default;
+
+                const popupContent = `
+                  <div style="text-align:center; font-weight:bold; font-size:16px; margin-bottom:5px;">
+                    ${site.id}
+                  </div>
+                  <div style="border:1px solid #ccc; padding:6px; margin-bottom:5px; border-radius:5px;">
+                    <strong>Site Information</strong><br/>
+                    Latitude: ${site.latitude}<br/>
+                    Longitude: ${site.longitude}<br/>
+                    Elevation: ${site.elevation}
+                  </div>
+                  <div style="border:1px solid #ccc; padding:6px; border-radius:5px;">
+                    <strong>Sample Information</strong><br/>
+                    Date: ${site.date}<br/>
+                    Time: ${site.time}<br/>
+                    Species: ${site.sampled}<br/>
+                    CBH: ${site.cbh}<br/>
+                    Soil Temp: ${site.soil_temp}<br/>
+                    Soil Moisture: ${site.soil_moisture}<br/>
+                    Soil pH: ${site.soil_ph}
+                  </div>
+                `;
+
+                L.marker([lat, lon], { icon })
+                  .bindPopup(popupContent)
+                  .addTo(map);
+              }
+            });
           }
-
-          const marker = L.marker([lat, lng], {
-            icon: icons[species] || L.Icon.Default.prototype
-          }).addTo(map);
-
-          marker.bindPopup(`
-            <strong>${row.id}</strong><br>
-            Species: ${species}<br>
-            Elevation: ${row.elevation} ft<br>
-            ${row.comments || ""}
-          `);
         });
-      },
-      error: function(err) {
-        console.error("CSV loading error:", err);
-      }
-    });
+      });
   </script>
 </body>
 </html>
+
