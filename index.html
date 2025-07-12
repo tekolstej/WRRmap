@@ -9,6 +9,15 @@
     #map {
       height: 100vh;
     }
+    .custom-tooltip {
+      background-color: white;
+      border: 1px solid #ccc;
+      color: black;
+      padding: 4px 8px;
+      font-size: 12px;
+      border-radius: 4px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    }
   </style>
 </head>
 <body>
@@ -85,9 +94,27 @@
                   </div>
                 `;
 
-                L.marker([lat, lon], { icon })
-                  .bindPopup(popupContent)
-                  .addTo(map);
+                const marker = L.marker([lat, lon], { icon }).addTo(map);
+                marker.bindPopup(popupContent);
+
+                // Add hover delay for tooltip
+                let hoverTimeout;
+                marker.on('mouseover', function () {
+                  hoverTimeout = setTimeout(() => {
+                    marker.bindTooltip(site.id, {
+                      permanent: false,
+                      direction: 'top',
+                      offset: [0, -20],
+                      opacity: 0.9,
+                      className: 'custom-tooltip'
+                    }).openTooltip();
+                  }, 1000); // show after 1 second
+                });
+
+                marker.on('mouseout', function () {
+                  clearTimeout(hoverTimeout);
+                  marker.closeTooltip();
+                });
               }
             });
           }
@@ -96,4 +123,5 @@
   </script>
 </body>
 </html>
+
 
