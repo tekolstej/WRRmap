@@ -1,108 +1,102 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Wind River Sampling Map</title>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  
-  <!-- Leaflet CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-
-  <!-- AwesomeMarkers CSS -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.awesome-markers/2.0.4/leaflet.awesome-markers.css" />
-
-  <!-- Font Awesome for Icons -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-
+  <title>Wind River Sampling Map</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
+  <script src="https://kit.fontawesome.com/a2e0c1d52c.js" crossorigin="anonymous"></script>
   <style>
-    #map { height: 100vh; }
-
-    .popup-title {
-      font-weight: bold;
-      font-size: 16px;
+    #map {
+      height: 100vh;
+    }
+    .popup-header {
       text-align: center;
-      margin-bottom: 8px;
-    }
-
-    .section {
-      border: 1px solid #ccc;
-      padding: 4px 8px;
-      margin-top: 6px;
-      background-color: #f9f9f9;
-    }
-
-    .section-title {
+      font-size: 18px;
       font-weight: bold;
-      margin-bottom: 2px;
+    }
+    .info-box {
+      border-top: 1px solid #ccc;
+      margin-top: 6px;
+      padding-top: 4px;
     }
   </style>
 </head>
 <body>
   <div id="map"></div>
 
-  <!-- JS Libraries -->
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.awesome-markers/2.0.4/leaflet.awesome-markers.min.js"></script>
-
   <script>
-    const map = L.map('map').setView([42.6, -109.1], 9);
+    const map = L.map("map").setView([42.6, -109.2], 10);
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 18,
+    // Terrain-style basemap
+    L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", {
+      maxZoom: 17,
+      attribution:
+        'Map data © <a href="https://opentopomap.org">OpenTopoMap</a>, © OpenStreetMap contributors',
     }).addTo(map);
 
-    // Custom icons using awesome-markers
-    const lodgepoleIcon = L.AwesomeMarkers.icon({
-      icon: 'tree',
-      markerColor: 'green',
-      prefix: 'fa'
-    });
+    // Icon setup
+    const icons = {
+      "Lodgepole Pine": L.divIcon({
+        html: '<i class="fas fa-tree" style="color:green;font-size:24px;"></i>',
+        iconSize: [24, 24],
+        className: 'leaflet-div-icon'
+      }),
+      "Aspen": L.divIcon({
+        html: '<i class="fas fa-leaf" style="color:goldenrod;font-size:24px;"></i>',
+        iconSize: [24, 24],
+        className: 'leaflet-div-icon'
+      }),
+      "Meadow": L.divIcon({
+        html: '<i class="fas fa-seedling" style="color:olive;font-size:24px;"></i>',
+        iconSize: [24, 24],
+        className: 'leaflet-div-icon'
+      })
+    };
 
-    const aspenIcon = L.AwesomeMarkers.icon({
-      icon: 'leaf',
-      markerColor: 'yellow',
-      prefix: 'fa'
-    });
+    // Load CSV from GitHub
+    const csvUrl = "https://raw.githubusercontent.com/tekolstej/WRRmap/main/sites1.csv";
 
-    // Parse CSV and add markers
-    Papa.parse('sites1.csv', {
+    Papa.parse(csvUrl, {
       download: true,
       header: true,
-      complete: function(results) {
+      complete: function (results) {
         results.data.forEach(row => {
-          if (row.latitude && row.longitude) {
-            const species = row.sampled || 'N/A';
+          if (!row.latitude || !row.longitude) return;
 
-            const popupContent = `
-              <div class="popup-title">${row.id}</div>
-              <div class="section">
-                <div class="section-title">Site Information</div>
-                <b>Latitude:</b> ${row.latitude}<br>
-                <b>Longitude:</b> ${row.longitude}<br>
-                <b>Elevation:</b> ${row.elevation || 'N/A'} ft<br>
-                <b>Comments:</b> ${row.comments || 'N/A'}
-              </div>
-              <div class="section">
-                <div class="section-title">Sample Information</div>
-                <b>Date:</b> ${row.date}<br>
-                <b>Time:</b> ${row.time}<br>
-                <b>Species:</b> ${species}<br>
-                <b>CBH:</b> ${row.cbh} cm<br>
-                <b>Soil Temp:</b> ${row.soil_temp} °C<br>
-                <b>Soil Moisture:</b> ${row.soil_moisture} %<br>
-                <b>Soil pH:</b> ${row.soil_ph}
-              </div>
-            `;
+          const lat = parseFloat(row.latitude);
+          const lng = parseFloat(row.longitude);
+          const species = row.sampled || "N/A";
+          const icon = icons[species] || icons["Meadow"];
 
-            let icon = L.AwesomeMarkers.icon({ icon: 'question', markerColor: 'blue' }); // default
-            if (species === "Lodgepole Pine") icon = lodgepoleIcon;
-            else if (species === "Aspen") icon = aspenIcon;
+          const popupContent = `
+            <div class="popup-header">${row.id}</div>
+            <div class="info-box">
+              <b>Site Information</b><br>
+              <b>Latitude:</b> ${row.latitude}<br>
+              <b>Longitude:</b> ${row.longitude}<br>
+              <b>Elevation:</b> ${row.elevation || "N/A"} ft<br>
+              <b>Comments:</b> ${row.comments || "N/A"}
+            </div>
+            <div class="info-box">
+              <b>Sample Information</b><br>
+              <b>Date:</b> ${row.date}<br>
+              <b>Time:</b> ${row.time}<br>
+              <b>Species:</b> ${species}<br>
+              <b>CBH:</b> ${row.cbh || "N/A"} cm<br>
+              <b>Soil Temp:</b> ${row.soil_temp || "N/A"} °C<br>
+              <b>Soil Moisture:</b> ${row.soil_moisture || "N/A"} %<br>
+              <b>Soil pH:</b> ${row.soil_ph || "N/A"}
+            </div>
+          `;
 
-            L.marker([parseFloat(row.latitude), parseFloat(row.longitude)], { icon })
-              .addTo(map)
-              .bindPopup(popupContent);
-          }
+          L.marker([lat, lng], { icon: icon }).addTo(map)
+            .bindPopup(popupContent);
         });
       }
     });
