@@ -5,77 +5,47 @@
   <title>Wind River Sampling Map</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" />
   <style>
     html, body { height: 100%; margin: 0; padding: 0; }
     #map { width: 100%; height: 100vh; }
-    .icon-marker i {
-      font-size: 18px;
-      color: white;
-      background: rgba(0,0,0,0.4);
-      border-radius: 12px;
-      padding: 5px;
-    }
   </style>
 </head>
 <body>
   <div id="map"></div>
-  
+
   <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
   <script>
-    const map = L.map('map').setView([42.6, -109.15], 10);
+    const map = L.map('map').setView([42.6, -109.15], 9);
 
-    // OpenStreetMap tile layer
+    // Basic OSM tiles
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
-    // FontAwesome icon mapping
-    function getIcon(species) {
-      let iconClass;
-      if (species.includes("Lodgepole")) {
-        iconClass = "fas fa-tree";  // FontAwesome tree icon
-      } else if (species.includes("Aspen")) {
-        iconClass = "fas fa-leaf";  // FontAwesome leaf icon
-      } else if (species.includes("Meadow")) {
-        iconClass = "fas fa-seedling"; // FontAwesome seedling icon
-      } else {
-        iconClass = "fas fa-map-marker-alt"; // Default fallback
-      }
-
-      return L.divIcon({
-        html: `<div class="icon-marker"><i class="${iconClass}"></i></div>`,
-        className: '',
-        iconSize: [24, 24],
-        iconAnchor: [12, 12]
-      });
-    }
-
-    // Load CSV data
-    Papa.parse('sites1.csv', {
+    // Load CSV
+    Papa.parse("sites1.csv", {
       header: true,
       download: true,
       complete: function(results) {
-        results.data.forEach(row => {
+        console.log("CSV parsed:", results.data);
+
+        results.data.forEach((row, index) => {
           const lat = parseFloat(row.latitude);
           const lng = parseFloat(row.longitude);
-          const species = row.sampled || "";
-          const comments = row.comments || "";
-          const env = row["env conditions"] || "";
-          if (!isNaN(lat) && !isNaN(lng)) {
-            const marker = L.marker([lat, lng], { icon: getIcon(species) }).addTo(map);
-            marker.bindPopup(`
-              <strong>${species}</strong><br>
-              Elevation: ${row.elevation}<br>
-              Date: ${row.date}<br>
-              CBH: ${row.cbh}<br>
-              Env: ${env}<br>
-              ${comments}
-            `);
+
+          if (isNaN(lat) || isNaN(lng)) {
+            console.warn(`Skipping row ${index + 2} — bad coordinates:`, row);
+            return;
           }
+
+          L.marker([lat, lng]).addTo(map)
+            .bindPopup(`<strong>${row.sampled || "Unknown"}</strong><br>${row.comments || ""}`);
         });
+      },
+      error: function(err) {
+        console.error("CSV load failed:", err);
       }
     });
   </script>
