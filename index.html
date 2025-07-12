@@ -4,99 +4,80 @@
   <meta charset="utf-8" />
   <title>Wind River Sampling Map</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
-  <script src="https://kit.fontawesome.com/2d64a4b9e1.js" crossorigin="anonymous"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" />
   <style>
-    #map {
-      height: 100vh;
-    }
-    .leaflet-div-icon {
-      background: transparent;
-      border: none;
-    }
-    .popup-header {
-      font-weight: bold;
-      font-size: 16px;
-      margin-bottom: 4px;
-    }
-    .info-box {
-      margin-top: 4px;
-      font-size: 14px;
+    html, body { height: 100%; margin: 0; padding: 0; }
+    #map { width: 100%; height: 100vh; }
+    .icon-marker i {
+      font-size: 18px;
+      color: white;
+      background: rgba(0,0,0,0.4);
+      border-radius: 12px;
+      padding: 5px;
     }
   </style>
 </head>
 <body>
   <div id="map"></div>
+  
+  <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
   <script>
-    const map = L.map("map").setView([42.6, -109.2], 10);
+    const map = L.map('map').setView([42.6, -109.15], 10);
 
-    // ✅ Use OpenStreetMap
+    // OpenStreetMap tile layer
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
-    // Define icons for species
-    const icons = {
-      "Lodgepole Pine": L.divIcon({
-        html: '<i class="fas fa-tree" style="color:green; font-size:22px;"></i>',
-        className: 'leaflet-div-icon',
-        iconSize: [22, 22]
-      }),
-      "Aspen": L.divIcon({
-        html: '<i class="fas fa-leaf" style="color:goldenrod; font-size:22px;"></i>',
-        className: 'leaflet-div-icon',
-        iconSize: [22, 22]
-      }),
-      "Meadow": L.divIcon({
-        html: '<i class="fas fa-seedling" style="color:darkolivegreen; font-size:22px;"></i>',
-        className: 'leaflet-div-icon',
-        iconSize: [22, 22]
-      }),
-      "default": L.divIcon({
-        html: '<i class="fas fa-map-marker-alt" style="color:gray; font-size:22px;"></i>',
-        className: 'leaflet-div-icon',
-        iconSize: [22, 22]
-      })
-    };
+    // FontAwesome icon mapping
+    function getIcon(species) {
+      let iconClass;
+      if (species.includes("Lodgepole")) {
+        iconClass = "fas fa-tree";  // FontAwesome tree icon
+      } else if (species.includes("Aspen")) {
+        iconClass = "fas fa-leaf";  // FontAwesome leaf icon
+      } else if (species.includes("Meadow")) {
+        iconClass = "fas fa-seedling"; // FontAwesome seedling icon
+      } else {
+        iconClass = "fas fa-map-marker-alt"; // Default fallback
+      }
 
-    const csvUrl = "https://raw.githubusercontent.com/tekolstej/WRRmap/main/sites1.csv";
+      return L.divIcon({
+        html: `<div class="icon-marker"><i class="${iconClass}"></i></div>`,
+        className: '',
+        iconSize: [24, 24],
+        iconAnchor: [12, 12]
+      });
+    }
 
-    Papa.parse(csvUrl, {
-      download: true,
+    // Load CSV data
+    Papa.parse('sites1.csv', {
       header: true,
+      download: true,
       complete: function(results) {
         results.data.forEach(row => {
           const lat = parseFloat(row.latitude);
           const lng = parseFloat(row.longitude);
-          if (!lat || !lng) return;
-
-          const species = row.sampled?.trim() || "default";
-          const icon = icons[species] || icons["default"];
-
-          const popup = `
-            <div class="popup-header">${row.id || "Sample Site"}</div>
-            <div class="info-box">
-              <b>Species:</b> ${species}<br>
-              <b>Date:</b> ${row.date || "N/A"}<br>
-              <b>Elevation:</b> ${row.elevation || "N/A"} ft<br>
-              <b>CBH:</b> ${row.cbh || "N/A"}<br>
-              <b>Soil Temp:</b> ${row.soil_temp || "N/A"} °C<br>
-              <b>Soil Moisture:</b> ${row.soil_moisture || "N/A"}%<br>
-              <b>Soil pH:</b> ${row.soil_ph || "N/A"}<br>
-              <b>Comments:</b> ${row.comments || "N/A"}
-            </div>
-          `;
-
-          L.marker([lat, lng], { icon: icon })
-            .addTo(map)
-            .bindPopup(popup);
+          const species = row.sampled || "";
+          const comments = row.comments || "";
+          const env = row["env conditions"] || "";
+          if (!isNaN(lat) && !isNaN(lng)) {
+            const marker = L.marker([lat, lng], { icon: getIcon(species) }).addTo(map);
+            marker.bindPopup(`
+              <strong>${species}</strong><br>
+              Elevation: ${row.elevation}<br>
+              Date: ${row.date}<br>
+              CBH: ${row.cbh}<br>
+              Env: ${env}<br>
+              ${comments}
+            `);
+          }
         });
       }
     });
   </script>
 </body>
 </html>
-
