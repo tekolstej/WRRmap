@@ -4,10 +4,7 @@
   <meta charset="utf-8" />
   <title>Wind River Sampling Map</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-  />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
   <script src="https://kit.fontawesome.com/2d64a4b9e1.js" crossorigin="anonymous"></script>
@@ -20,14 +17,13 @@
       border: none;
     }
     .popup-header {
-      text-align: center;
-      font-size: 18px;
       font-weight: bold;
+      font-size: 16px;
+      margin-bottom: 4px;
     }
     .info-box {
-      border-top: 1px solid #ccc;
-      margin-top: 6px;
-      padding-top: 4px;
+      margin-top: 4px;
+      font-size: 14px;
     }
   </style>
 </head>
@@ -37,74 +33,70 @@
   <script>
     const map = L.map("map").setView([42.6, -109.2], 10);
 
-    // ✅ Reliable Esri satellite basemap via leaflet-providers
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{x}/{y}', {
-      attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Earthstar Geographics',
-      maxZoom: 19
+    // ✅ Use OpenStreetMap
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
-    // Font Awesome icons per species
+    // Define icons for species
     const icons = {
       "Lodgepole Pine": L.divIcon({
-        html: '<i class="fas fa-tree" style="color:green;font-size:22px;"></i>',
+        html: '<i class="fas fa-tree" style="color:green; font-size:22px;"></i>',
         className: 'leaflet-div-icon',
         iconSize: [22, 22]
       }),
       "Aspen": L.divIcon({
-        html: '<i class="fas fa-leaf" style="color:goldenrod;font-size:22px;"></i>',
+        html: '<i class="fas fa-leaf" style="color:goldenrod; font-size:22px;"></i>',
         className: 'leaflet-div-icon',
         iconSize: [22, 22]
       }),
       "Meadow": L.divIcon({
-        html: '<i class="fas fa-seedling" style="color:darkolivegreen;font-size:22px;"></i>',
+        html: '<i class="fas fa-seedling" style="color:darkolivegreen; font-size:22px;"></i>',
         className: 'leaflet-div-icon',
         iconSize: [22, 22]
       }),
       "default": L.divIcon({
-        html: '<i class="fas fa-map-marker-alt" style="color:gray;font-size:22px;"></i>',
+        html: '<i class="fas fa-map-marker-alt" style="color:gray; font-size:22px;"></i>',
         className: 'leaflet-div-icon',
         iconSize: [22, 22]
       })
     };
 
-    // Load your CSV file hosted on GitHub
-    const csvUrl = "https://raw.githubusercontent.com/tekolstej/WRRmap/main/sites.csv";
+    const csvUrl = "https://raw.githubusercontent.com/tekolstej/WRRmap/main/sites1.csv";
 
     Papa.parse(csvUrl, {
       download: true,
       header: true,
-      complete: function (results) {
+      complete: function(results) {
         results.data.forEach(row => {
-          if (!row.latitude || !row.longitude) return;
-
           const lat = parseFloat(row.latitude);
           const lng = parseFloat(row.longitude);
+          if (!lat || !lng) return;
+
           const species = row.sampled?.trim() || "default";
           const icon = icons[species] || icons["default"];
 
           const popup = `
-            <div class="popup-header">${row.id}</div>
+            <div class="popup-header">${row.id || "Sample Site"}</div>
             <div class="info-box">
-              <b>Latitude:</b> ${row.latitude}<br>
-              <b>Longitude:</b> ${row.longitude}<br>
-              <b>Elevation:</b> ${row.elevation || "N/A"} ft<br>
-              <b>Comments:</b> ${row.comments || "N/A"}
-            </div>
-            <div class="info-box">
-              <b>Date:</b> ${row.date}<br>
-              <b>Time:</b> ${row.time}<br>
               <b>Species:</b> ${species}<br>
-              <b>CBH:</b> ${row.cbh || "N/A"} cm<br>
+              <b>Date:</b> ${row.date || "N/A"}<br>
+              <b>Elevation:</b> ${row.elevation || "N/A"} ft<br>
+              <b>CBH:</b> ${row.cbh || "N/A"}<br>
               <b>Soil Temp:</b> ${row.soil_temp || "N/A"} °C<br>
-              <b>Soil Moisture:</b> ${row.soil_moisture || "N/A"} %<br>
-              <b>Soil pH:</b> ${row.soil_ph || "N/A"}
+              <b>Soil Moisture:</b> ${row.soil_moisture || "N/A"}%<br>
+              <b>Soil pH:</b> ${row.soil_ph || "N/A"}<br>
+              <b>Comments:</b> ${row.comments || "N/A"}
             </div>
           `;
 
-          L.marker([lat, lng], { icon: icon }).addTo(map).bindPopup(popup);
+          L.marker([lat, lng], { icon: icon })
+            .addTo(map)
+            .bindPopup(popup);
         });
       }
     });
   </script>
 </body>
 </html>
+
