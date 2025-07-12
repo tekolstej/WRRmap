@@ -1,1 +1,2 @@
 # WRRmap
+Map of sampling sites in the Wind River Range of Wyoming. Sample sites are located regionally throughout the range. Regions are categorized spatially and selected by historical dust deposition patterns. Historical deposition patterns (Dahms 1993, Brahney et al., 2013) show a gradient of dust contributions from the neighboring Green River Basin (GRB) to mountain catenas with the Southwestern portion recieving greater dust than the northern portion of the range. 
