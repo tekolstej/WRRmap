@@ -15,10 +15,21 @@
       font-family: sans-serif;
     }
     #map {
-      height: 70vh;
+      height: 65vh;
+    }
+    #controls {
+      padding: 10px 20px;
+      background: #f4f4f4;
+      border-bottom: 1px solid #ccc;
     }
     #table-container {
       padding: 20px;
+    }
+    label {
+      margin-right: 10px;
+    }
+    select {
+      margin-right: 20px;
     }
     table.dataTable {
       width: 100%;
@@ -27,6 +38,24 @@
 </head>
 <body>
   <div id="map"></div>
+  <div id="controls">
+    <label for="speciesFilter">Species:</label>
+    <select id="speciesFilter">
+      <option value="">All</option>
+      <option value="Lodgepole Pine">Lodgepole Pine</option>
+      <option value="Aspen">Aspen</option>
+      <option value="Meadow">Meadow</option>
+    </select>
+
+    <label for="elevationFilter">Elevation:</label>
+    <select id="elevationFilter">
+      <option value="">All</option>
+      <option value="Low">Low</option>
+      <option value="Mid">Mid</option>
+      <option value="High">High</option>
+    </select>
+  </div>
+
   <div id="table-container">
     <table id="dataTable" class="display"></table>
   </div>
@@ -39,7 +68,6 @@
 
   <script>
     const map = L.map('map').setView([42.7, -109.3], 9);
-
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
@@ -50,9 +78,77 @@
       'Meadow': L.icon({ iconUrl: 'icons/medo.png', iconSize: [32, 37], iconAnchor: [16, 37] })
     };
 
-    const markers = L.markerClusterGroup();
-    const markerMap = {}; // id => marker
-    let hoverTimeout = null;
+    let allData = [];
+    let allMarkers = [];
+    let markerMap = {};
+    let clusterGroup = L.markerClusterGroup();
+    let dataTable;
+
+    function createMarker(site) {
+      const lat = parseFloat(site.latitude);
+      const lon = parseFloat(site.longitude);
+      if (isNaN(lat) || isNaN(lon)) return null;
+
+      const icon = icons[site.sampled] || L.Icon.Default;
+      const popupContent = `
+        <div style="text-align:center; font-weight:bold; font-size:16px; margin-bottom:5px;">
+          ${site.id}
+        </div>
+        <div style="border:1px solid #ccc; padding:6px; margin-bottom:5px; border-radius:5px;">
+          <strong>Site Information</strong><br/>
+          Latitude: ${site.latitude}<br/>
+          Longitude: ${site.longitude}<br/>
+          Elevation: ${site.elevation}
+        </div>
+        <div style="border:1px solid #ccc; padding:6px; border-radius:5px;">
+          <strong>Sample Information</strong><br/>
+          Date: ${site.date}<br/>
+          Time: ${site.time}<br/>
+          Species: ${site.sampled}<br/>
+          CBH: ${site.cbh}<br/>
+          Soil Temp: ${site.soil_temp}<br/>
+          Soil Moisture: ${site.soil_moisture}<br/>
+          Soil pH: ${site.soil_ph}
+        </div>
+      `;
+
+      const marker = L.marker([lat, lon], { icon }).bindPopup(popupContent);
+
+      marker.on('mouseover', () => {
+        marker.hoverTimeout = setTimeout(() => {
+          marker.bindTooltip(site.id, { permanent: false, direction: "top" }).openTooltip();
+        }, 1000);
+      });
+
+      marker.on('mouseout', () => {
+        clearTimeout(marker.hoverTimeout);
+        marker.closeTooltip();
+      });
+
+      markerMap[site.id] = marker;
+      return marker;
+    }
+
+    function updateMapAndTable() {
+      const species = document.getElementById('speciesFilter').value;
+      const elevation = document.getElementById('elevationFilter').value;
+
+      const filtered = allData.filter(site => {
+        return (!species || site.sampled === species) &&
+               (!elevation || site.site === elevation);
+      });
+
+      // Clear and repopulate marker cluster
+      clusterGroup.clearLayers();
+      const newMarkers = filtered.map(createMarker).filter(m => m);
+      allMarkers = newMarkers;
+      clusterGroup.addLayers(newMarkers);
+
+      // Update table
+      dataTable.clear();
+      dataTable.rows.add(filtered);
+      dataTable.draw();
+    }
 
     fetch('sites1.csv')
       .then(response => response.text())
@@ -61,97 +157,49 @@
           header: true,
           skipEmptyLines: true,
           complete: function(results) {
-            const data = results.data;
+            allData = results.data;
 
-            // Build marker layer and table
-            const tableData = [];
-            const columns = [
-              { title: "ID", data: "id" },
-              { title: "Region", data: "region" },
-              { title: "Elevation Site", data: "site" },
-              { title: "Date", data: "date" },
-              { title: "Time", data: "time" },
-              { title: "Species", data: "sampled" },
-              { title: "CBH", data: "cbh" },
-              { title: "Latitude", data: "latitude" },
-              { title: "Longitude", data: "longitude" },
-              { title: "Elevation", data: "elevation" },
-              { title: "Soil Temp", data: "soil_temp" },
-              { title: "Soil Moisture", data: "soil_moisture" },
-              { title: "Soil pH", data: "soil_ph" }
-            ];
+            allMarkers = allData.map(createMarker).filter(m => m);
+            clusterGroup.addLayers(allMarkers);
+            map.addLayer(clusterGroup);
 
-            data.forEach(site => {
-              const lat = parseFloat(site.latitude);
-              const lon = parseFloat(site.longitude);
-
-              if (!isNaN(lat) && !isNaN(lon)) {
-                const icon = icons[site.sampled] || L.Icon.Default;
-
-                const popupContent = `
-                  <div style="text-align:center; font-weight:bold; font-size:16px; margin-bottom:5px;">
-                    ${site.id}
-                  </div>
-                  <div style="border:1px solid #ccc; padding:6px; margin-bottom:5px; border-radius:5px;">
-                    <strong>Site Information</strong><br/>
-                    Latitude: ${site.latitude}<br/>
-                    Longitude: ${site.longitude}<br/>
-                    Elevation: ${site.elevation}
-                  </div>
-                  <div style="border:1px solid #ccc; padding:6px; border-radius:5px;">
-                    <strong>Sample Information</strong><br/>
-                    Date: ${site.date}<br/>
-                    Time: ${site.time}<br/>
-                    Species: ${site.sampled}<br/>
-                    CBH: ${site.cbh}<br/>
-                    Soil Temp: ${site.soil_temp}<br/>
-                    Soil Moisture: ${site.soil_moisture}<br/>
-                    Soil pH: ${site.soil_ph}
-                  </div>
-                `;
-
-                const marker = L.marker([lat, lon], { icon }).bindPopup(popupContent);
-
-                // Hover effect
-                marker.on('mouseover', () => {
-                  hoverTimeout = setTimeout(() => {
-                    marker.bindTooltip(site.id, { permanent: false, direction: "top" }).openTooltip();
-                  }, 1000);
-                });
-                marker.on('mouseout', () => {
-                  clearTimeout(hoverTimeout);
-                  marker.closeTooltip();
-                });
-
-                markerMap[site.id] = marker;
-                markers.addLayer(marker);
-                tableData.push(site);
-              }
+            dataTable = $('#dataTable').DataTable({
+              data: allData,
+              columns: [
+                { title: "ID", data: "id" },
+                { title: "Region", data: "region" },
+                { title: "Elevation Site", data: "site" },
+                { title: "Date", data: "date" },
+                { title: "Time", data: "time" },
+                { title: "Species", data: "sampled" },
+                { title: "CBH", data: "cbh" },
+                { title: "Latitude", data: "latitude" },
+                { title: "Longitude", data: "longitude" },
+                { title: "Elevation", data: "elevation" },
+                { title: "Soil Temp", data: "soil_temp" },
+                { title: "Soil Moisture", data: "soil_moisture" },
+                { title: "Soil pH", data: "soil_ph" }
+              ]
             });
 
-            map.addLayer(markers);
-
-            // DataTable
-            const table = $('#dataTable').DataTable({
-              data: tableData,
-              columns: columns
-            });
-
-            // On row click, fly to marker and open popup
+            // Row click event
             $('#dataTable tbody').on('click', 'tr', function () {
-              const rowData = table.row(this).data();
+              const rowData = dataTable.row(this).data();
               const marker = markerMap[rowData.id];
               if (marker) {
                 map.setView(marker.getLatLng(), 13);
                 marker.openPopup();
               }
             });
+
+            // Dropdown filter listeners
+            document.getElementById('speciesFilter').addEventListener('change', updateMapAndTable);
+            document.getElementById('elevationFilter').addEventListener('change', updateMapAndTable);
           }
         });
       });
   </script>
 </body>
 </html>
-
 
 
