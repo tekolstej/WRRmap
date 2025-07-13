@@ -1,14 +1,14 @@
-<!DOCTYPE html>
+<<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8" />
   <title>Wind River Sampling Map</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  
+
+  <!-- CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css"/>
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css" />
-
   <style>
     body, html {
       margin: 0;
@@ -23,29 +23,20 @@
       padding: 10px 20px;
       background: #f4f4f4;
       border-bottom: 1px solid #ccc;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
     }
     #table-container {
       padding: 20px;
     }
     label {
-      margin-right: 5px;
-    }
-    select, input[type="checkbox"] {
       margin-right: 10px;
     }
-    .legend {
-      position: absolute;
-      bottom: 85px;
-      left: 10px;
-      z-index: 1000;
-      background: white;
-      padding: 6px;
-      border: 1px solid #ccc;
-      font-size: 12px;
-      line-height: 1.5;
+    select, input[type="checkbox"] {
+      margin-right: 20px;
+    }
+    #chart-container {
+      width: 100%;
+      height: 35vh;
+      padding: 10px 20px;
     }
   </style>
 </head>
@@ -53,6 +44,21 @@
   <div id="map"></div>
 
   <div id="controls">
+    <label for="yearFilter">Year:</label>
+    <select id="yearFilter">
+      <option value="">All</option>
+      <option value="2024">2024</option>
+      <option value="2025">2025</option>
+    </select>
+
+    <label for="regionFilter">Region:</label>
+    <select id="regionFilter">
+      <option value="">All</option>
+      <option value="SW">SW</option>
+      <option value="WC">WC</option>
+      <option value="NW">NW</option>
+    </select>
+
     <label for="speciesFilter">Species:</label>
     <select id="speciesFilter">
       <option value="">All</option>
@@ -69,21 +75,6 @@
       <option value="High">High</option>
     </select>
 
-    <label for="regionFilter">Region:</label>
-    <select id="regionFilter">
-      <option value="">All</option>
-      <option value="WC">WC</option>
-      <option value="NW">NW</option>
-      <option value="SW">SW</option>
-    </select>
-
-    <label for="yearFilter">Year:</label>
-    <select id="yearFilter">
-      <option value="">All</option>
-      <option value="24">2024</option>
-      <option value="25">2025</option>
-    </select>
-
     <label><input type="checkbox" id="heatmapToggle"> Show Heatmap</label>
 
     <label for="heatmapVariable">Heatmap Variable:</label>
@@ -93,24 +84,29 @@
       <option value="soil_ph">Soil pH</option>
       <option value="elevation">Elevation</option>
     </select>
+
+    <label for="xVar">X:</label>
+    <select id="xVar"></select>
+    <label for="yVar">Y:</label>
+    <select id="yVar"></select>
   </div>
 
   <div id="table-container">
     <table id="dataTable" class="display"></table>
   </div>
 
-  <div class="legend">
-    <strong>Heatmap Scale</strong><br>
-    <span style="color:blue">Low</span> — <span style="color:red">High</span>
+  <div id="chart-container">
+    <canvas id="chart"></canvas>
   </div>
 
+  <!-- Scripts -->
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
   <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
   <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
-
   <script>
     const map = L.map('map').setView([42.7, -109.3], 9);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -124,123 +120,103 @@
     };
 
     let allData = [];
+    let markerMap = {};
     let clusterGroup = L.markerClusterGroup();
     let heatLayer;
-    let markerMap = {};
+    let chart;
     let dataTable;
 
     function createMarker(site) {
       const lat = parseFloat(site.latitude);
       const lon = parseFloat(site.longitude);
       if (isNaN(lat) || isNaN(lon)) return null;
-
       const icon = icons[site.sampled] || L.Icon.Default;
-      const popup = `<b>${site.id}</b><br>Species: ${site.sampled}<br>Elevation: ${site.elevation}`;
-      const marker = L.marker([lat, lon], { icon }).bindPopup(popup);
+      const marker = L.marker([lat, lon], { icon });
+      marker.bindPopup(`<strong>${site.id}</strong><br>Species: ${site.sampled}<br>Soil pH: ${site.soil_ph}`);
       markerMap[site.id] = marker;
-
-      marker.on('mouseover', () => {
-        marker.hoverTimeout = setTimeout(() => {
-          marker.bindTooltip(site.id, { permanent: false, direction: 'top' }).openTooltip();
-        }, 1000);
-      });
-
-      marker.on('mouseout', () => {
-        clearTimeout(marker.hoverTimeout);
-        marker.closeTooltip();
-      });
-
       return marker;
     }
 
     function updateHeatmap(data) {
       const variable = document.getElementById('heatmapVariable').value;
       const values = data.map(d => parseFloat(d[variable])).filter(v => !isNaN(v));
-      const min = Math.min(...values);
-      const max = Math.max(...values);
-
-      const points = data.map(d => {
-        const lat = parseFloat(d.latitude);
-        const lon = parseFloat(d.longitude);
-        const val = parseFloat(d[variable]);
-        if (!isNaN(lat) && !isNaN(lon) && !isNaN(val)) {
-          return [lat, lon, (val - min) / (max - min)];
-        }
-        return null;
-      }).filter(p => p);
+      const min = Math.min(...values), max = Math.max(...values);
+      const points = data.map(site => {
+        const val = parseFloat(site[variable]);
+        const lat = parseFloat(site.latitude);
+        const lon = parseFloat(site.longitude);
+        return (!isNaN(val) && !isNaN(lat) && !isNaN(lon)) ? [lat, lon, (val - min) / (max - min)] : null;
+      }).filter(Boolean);
 
       if (heatLayer) map.removeLayer(heatLayer);
       heatLayer = L.heatLayer(points, {
         radius: 25,
         blur: 15,
-        maxZoom: 13,
         gradient: { 0.0: 'blue', 0.5: 'lime', 0.75: 'yellow', 1.0: 'red' }
       });
-
       if (document.getElementById('heatmapToggle').checked) heatLayer.addTo(map);
     }
 
-    function applyFilters() {
+    function updateChart(data) {
+      const xVar = document.getElementById('xVar').value;
+      const yVar = document.getElementById('yVar').value;
+      const points = data.map(d => ({ x: parseFloat(d[xVar]), y: parseFloat(d[yVar]) }))
+                         .filter(p => !isNaN(p.x) && !isNaN(p.y));
+
+      if (chart) chart.destroy();
+      chart = new Chart(document.getElementById('chart'), {
+        type: 'scatter',
+        data: { datasets: [{ label: `${yVar} vs ${xVar}`, data: points, backgroundColor: 'orange' }] },
+        options: { scales: { x: { title: { display: true, text: xVar } }, y: { title: { display: true, text: yVar } } } }
+      });
+    }
+
+    function updateMapAndTable() {
+      const year = document.getElementById('yearFilter').value;
+      const region = document.getElementById('regionFilter').value;
       const species = document.getElementById('speciesFilter').value;
       const elevation = document.getElementById('elevationFilter').value;
-      const region = document.getElementById('regionFilter').value;
-      const year = document.getElementById('yearFilter').value;
 
       const filtered = allData.filter(site => {
-        return (!species || site.sampled === species) &&
-               (!elevation || site.site === elevation) &&
+        return (!year || site.date.includes(year)) &&
                (!region || site.region === region) &&
-               (!year || (site.date && site.date.endsWith(year)));
+               (!species || site.sampled === species) &&
+               (!elevation || site.site === elevation);
       });
 
       clusterGroup.clearLayers();
-      const markers = filtered.map(createMarker).filter(m => m);
-      clusterGroup.addLayers(markers);
-
+      filtered.map(createMarker).forEach(m => m && clusterGroup.addLayer(m));
       updateHeatmap(filtered);
-      dataTable.clear();
-      dataTable.rows.add(filtered);
-      dataTable.draw();
+      updateChart(filtered);
+      dataTable.clear().rows.add(filtered).draw();
     }
 
     fetch('sites3.csv')
-      .then(r => r.text())
-      .then(csv => {
-        Papa.parse(csv, {
+      .then(res => res.text())
+      .then(csvText => {
+        Papa.parse(csvText, {
           header: true,
           skipEmptyLines: true,
           complete: function(results) {
             allData = results.data;
-            const markers = allData.map(createMarker).filter(m => m);
-            clusterGroup.addLayers(markers);
             map.addLayer(clusterGroup);
-            updateHeatmap(allData);
+            allData.forEach(createMarker);
+
+            const numericFields = Object.keys(allData[0]).filter(k => !isNaN(parseFloat(allData[0][k])));
+            numericFields.forEach(field => {
+              document.getElementById('xVar').innerHTML += `<option value="${field}">${field}</option>`;
+              document.getElementById('yVar').innerHTML += `<option value="${field}">${field}</option>`;
+            });
 
             dataTable = $('#dataTable').DataTable({
               data: allData,
-              columns: [
-                { title: "ID", data: "id" },
-                { title: "Region", data: "region" },
-                { title: "Elevation Site", data: "site" },
-                { title: "Date", data: "date" },
-                { title: "Time", data: "time" },
-                { title: "Species", data: "sampled" },
-                { title: "CBH", data: "cbh" },
-                { title: "Latitude", data: "latitude" },
-                { title: "Longitude", data: "longitude" },
-                { title: "Elevation", data: "elevation" },
-                { title: "Soil Temp", data: "soil_temp" },
-                { title: "Soil Moisture", data: "soil_moisture" },
-                { title: "Soil pH", data: "soil_ph" }
-              ]
+              columns: Object.keys(allData[0]).map(k => ({ title: k, data: k }))
             });
 
-            document.getElementById('speciesFilter').addEventListener('change', applyFilters);
-            document.getElementById('elevationFilter').addEventListener('change', applyFilters);
-            document.getElementById('regionFilter').addEventListener('change', applyFilters);
-            document.getElementById('yearFilter').addEventListener('change', applyFilters);
-            document.getElementById('heatmapToggle').addEventListener('change', () => updateHeatmap(dataTable.rows({ search: 'applied' }).data().toArray()));
-            document.getElementById('heatmapVariable').addEventListener('change', () => updateHeatmap(dataTable.rows({ search: 'applied' }).data().toArray()));
+            document.querySelectorAll('#speciesFilter, #elevationFilter, #heatmapToggle, #heatmapVariable, #yearFilter, #regionFilter, #xVar, #yVar')
+              .forEach(el => el.addEventListener('change', updateMapAndTable));
+
+            updateMapAndTable();
           }
         });
       });
