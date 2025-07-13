@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Wind River Sampling Map</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css" />
+  
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      font-family: sans-serif;
+    }
+    #map {
+      height: 65vh;
+    }
+    #controls {
+      padding: 10px 20px;
+      background: #f4f4f4;
+      border-bottom: 1px solid #ccc;
+    }
+    #table-container {
+      padding: 20px;
+    }
+    label {
+      margin-right: 10px;
+    }
+    select, input[type="checkbox"] {
+      margin-right: 20px;
+    }
+    table.dataTable {
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <div id="controls">
+    <label for="speciesFilter">Species:</label>
+    <select id="speciesFilter">
+      <option value="">All</option>
+      <option value="Lodgepole Pine">Lodgepole Pine</option>
+      <option value="Aspen">Aspen</option>
+      <option value="Meadow">Meadow</option>
+    </select>
+
+    <label for="elevationFilter">Elevation:</label>
+    <select id="elevationFilter">
+      <option value="">All</option>
+      <option value="Low">Low</option>
+      <option value="Mid">Mid</option>
+      <option value="High">High</option>
+    </select>
+
+    <label><input type="checkbox" id="heatmapToggle"> Show Soil Moisture Heatmap</label>
+  </div>
+
+  <div id="table-container">
+    <table id="dataTable" class="display"></table>
+  </div>
+
+  <!-- JS Libraries -->
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+  <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
+
+  <script>
+    const map = L.map('map').setView([42.7, -109.3], 9);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    const icons = {
+      'Lodgepole Pine': L.icon({ iconUrl: 'icons/lp.png', iconSize: [32, 37], iconAnchor: [16, 37] }),
+      'Aspen': L.icon({ iconUrl: 'icons/asp.png', iconSize: [32, 37], iconAnchor: [16, 37] }),
+      'Meadow': L.icon({ iconUrl: 'icons/medo.png', iconSize: [32, 37], iconAnchor: [16, 37] })
+    };
+
+    let allData = [];
+    let allMarkers = [];
+    let markerMap = {};
+    let clusterGroup = L.markerClusterGroup();
+    let dataTable;
+    let heatLayer;
+
+    function createMarker(site) {
+      const lat = parseFloat(site.latitude);
+      const lon = parseFloat(site.longitude);
+      if (isNaN(lat) || isNaN(lon)) return null;
+
+      const icon = icons[site.sampled] || L.Icon.Default;
+      const popupContent = `
+        <div style="text-align:center; font-weight:bold; font-size:16px; margin-bottom:5px;">
+          ${site.id}
+        </div>
+        <div style="border:1px solid #ccc; padding:6px; margin-bottom:5px; border-radius:5px;">
+          <strong>Site Information</strong><br/>
+          Latitude: ${site.latitude}<br/>
+          Longitude: ${site.longitude}<br/>
+          Elevation: ${site.elevation}
+        </div>
+        <div style="border:1px solid #ccc; padding:6px; border-radius:5px;">
+          <strong>Sample Information</strong><br/>
+          Date: ${site.date}<br/>
+          Time: ${site.time}<br/>
+          Species: ${site.sampled}<br/>
+          CBH: ${site.cbh}<br/>
+          Soil Temp: ${site.soil_temp}<br/>
+          Soil Moisture: ${site.soil_moisture}<br/>
+          Soil pH: ${site.soil_ph}
+        </div>
+      `;
+
+      const marker = L.marker([lat, lon], { icon }).bindPopup(popupContent);
+
+      marker.on('mouseover', () => {
+        marker.hoverTimeout = setTimeout(() => {
+          marker.bindTooltip(site.id, { permanent: false, direction: "top" }).openTooltip();
+        }, 1000);
+      });
+
+      marker.on('mouseout', () => {
+        clearTimeout(marker.hoverTimeout);
+        marker.closeTooltip();
+      });
+
+      markerMap[site.id] = marker;
+      return marker;
+    }
+
+    function updateHeatmap(data) {
+      const points = data.map(site => {
+        const lat = parseFloat(site.latitude);
+        const lon = parseFloat(site.longitude);
+        const intensity = parseFloat(site.soil_moisture);
+        return (!isNaN(lat) && !isNaN(lon) && !isNaN(intensity)) ? [lat, lon, intensity] : null;
+      }).filter(p => p);
+
+      if (heatLayer) map.removeLayer(heatLayer);
+      heatLayer = L.heatLayer(points, {
+        radius: 25,
+        blur: 15,
+        maxZoom: 13,
+        gradient: { 0.2: 'blue', 0.4: 'lime', 0.6: 'yellow', 1.0: 'red' }
+      });
+
+      const show = document.getElementById('heatmapToggle').checked;
+      if (show) heatLayer.addTo(map);
+    }
+
+    function updateMapAndTable() {
+      const species = document.getElementById('speciesFilter').value;
+      const elevation = document.getElementById('elevationFilter').value;
+
+      const filtered = allData.filter(site => {
+        return (!species || site.sampled === species) &&
+               (!elevation || site.site === elevation);
+      });
+
+      clusterGroup.clearLayers();
+      const newMarkers = filtered.map(createMarker).filter(m => m);
+      allMarkers = newMarkers;
+      clusterGroup.addLayers(newMarkers);
+      updateHeatmap(filtered);
+
+      dataTable.clear();
+      dataTable.rows.add(filtered);
+      dataTable.draw();
+    }
+
+    fetch('sites1.csv')
+      .then(response => response.text())
+      .then(csvText => {
+        Papa.parse(csvText, {
+          header: true,
+          skipEmptyLines: true,
+          complete: function(results) {
+            allData = results.data;
+
+            allMarkers = allData.map(createMarker).filter(m => m);
+            clusterGroup.addLayers(allMarkers);
+            map.addLayer(clusterGroup);
+
+            updateHeatmap(allData);
+
+            dataTable = $('#dataTable').DataTable({
+              data: allData,
+              columns: [
+                { title: "ID", data: "id" },
+                { title: "Region", data: "region" },
+                { title: "Elevation Site", data: "site" },
+                { title: "Date", data: "date" },
+                { title: "Time", data: "time" },
+                { title: "Species", data: "sampled" },
+                { title: "CBH", data: "cbh" },
+                { title: "Latitude", data: "latitude" },
+                { title: "Longitude", data: "longitude" },
+                { title: "Elevation", data: "elevation" },
+                { title: "Soil Temp", data: "soil_temp" },
+                { title: "Soil Moisture", data: "soil_moisture" },
+                { title: "Soil pH", data: "soil_ph" }
+              ]
+            });
+
+            $('#dataTable tbody').on('click', 'tr', function () {
+              const rowData = dataTable.row(this).data();
+              const marker = markerMap[rowData.id];
+              if (marker) {
+                map.setView(marker.getLatLng(), 13);
+                marker.openPopup();
+              }
+            });
+
+            document.getElementById('speciesFilter').addEventListener('change', updateMapAndTable);
+            document.getElementById('elevationFilter').addEventListener('change', updateMapAndTable);
+            document.getElementById('heatmapToggle').addEventListener('change', () => {
+              updateHeatmap(dataTable.rows({ search: 'applied' }).data().toArray());
+            });
+          }
+        });
+      });
+  </script>
+</body>
+</html>
