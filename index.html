@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css"/>
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css" />
-  
+
   <style>
     body, html {
       margin: 0;
@@ -23,36 +23,29 @@
       padding: 10px 20px;
       background: #f4f4f4;
       border-bottom: 1px solid #ccc;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
     }
     #table-container {
       padding: 20px;
     }
     label {
-      margin-right: 10px;
+      margin-right: 5px;
     }
     select, input[type="checkbox"] {
-      margin-right: 20px;
+      margin-right: 10px;
     }
-    table.dataTable {
-      width: 100%;
-    }
-    #heatmapLegend {
+    .legend {
       position: absolute;
-      bottom: 80px;
-      left: 20px;
-      padding: 8px 12px;
-      background: white;
-      border: 1px solid #ccc;
-      border-radius: 5px;
-      font-size: 12px;
+      bottom: 85px;
+      left: 10px;
       z-index: 1000;
-      display: none;
-    }
-    #heatmapLegend .scale {
-      height: 12px;
-      background: linear-gradient(to right, blue, lime, yellow, red);
-      margin-top: 4px;
-      border: 1px solid #aaa;
+      background: white;
+      padding: 6px;
+      border: 1px solid #ccc;
+      font-size: 12px;
+      line-height: 1.5;
     }
   </style>
 </head>
@@ -76,9 +69,22 @@
       <option value="High">High</option>
     </select>
 
-    <label for="heatmapToggle">
-      <input type="checkbox" id="heatmapToggle"> Show Heatmap
-    </label>
+    <label for="regionFilter">Region:</label>
+    <select id="regionFilter">
+      <option value="">All</option>
+      <option value="WC">WC</option>
+      <option value="NW">NW</option>
+      <option value="SW">SW</option>
+    </select>
+
+    <label for="yearFilter">Year:</label>
+    <select id="yearFilter">
+      <option value="">All</option>
+      <option value="24">2024</option>
+      <option value="25">2025</option>
+    </select>
+
+    <label><input type="checkbox" id="heatmapToggle"> Show Heatmap</label>
 
     <label for="heatmapVariable">Heatmap Variable:</label>
     <select id="heatmapVariable">
@@ -89,20 +95,15 @@
     </select>
   </div>
 
-  <div id="heatmapLegend">
-    <div><strong>Heatmap Scale</strong></div>
-    <div id="legendLabel">Soil Moisture</div>
-    <div class="scale"></div>
-    <div style="display:flex; justify-content:space-between;">
-      <span>Low</span><span>High</span>
-    </div>
-  </div>
-
   <div id="table-container">
     <table id="dataTable" class="display"></table>
   </div>
 
-  <!-- JS Libraries -->
+  <div class="legend">
+    <strong>Heatmap Scale</strong><br>
+    <span style="color:blue">Low</span> — <span style="color:red">High</span>
+  </div>
+
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
@@ -123,11 +124,10 @@
     };
 
     let allData = [];
-    let allMarkers = [];
-    let markerMap = {};
     let clusterGroup = L.markerClusterGroup();
-    let dataTable;
     let heatLayer;
+    let markerMap = {};
+    let dataTable;
 
     function createMarker(site) {
       const lat = parseFloat(site.latitude);
@@ -135,33 +135,13 @@
       if (isNaN(lat) || isNaN(lon)) return null;
 
       const icon = icons[site.sampled] || L.Icon.Default;
-      const popupContent = `
-        <div style="text-align:center; font-weight:bold; font-size:16px; margin-bottom:5px;">
-          ${site.id}
-        </div>
-        <div style="border:1px solid #ccc; padding:6px; margin-bottom:5px; border-radius:5px;">
-          <strong>Site Information</strong><br/>
-          Latitude: ${site.latitude}<br/>
-          Longitude: ${site.longitude}<br/>
-          Elevation: ${site.elevation}
-        </div>
-        <div style="border:1px solid #ccc; padding:6px; border-radius:5px;">
-          <strong>Sample Information</strong><br/>
-          Date: ${site.date}<br/>
-          Time: ${site.time}<br/>
-          Species: ${site.sampled}<br/>
-          CBH: ${site.cbh}<br/>
-          Soil Temp: ${site.soil_temp}<br/>
-          Soil Moisture: ${site.soil_moisture}<br/>
-          Soil pH: ${site.soil_ph}
-        </div>
-      `;
-
-      const marker = L.marker([lat, lon], { icon }).bindPopup(popupContent);
+      const popup = `<b>${site.id}</b><br>Species: ${site.sampled}<br>Elevation: ${site.elevation}`;
+      const marker = L.marker([lat, lon], { icon }).bindPopup(popup);
+      markerMap[site.id] = marker;
 
       marker.on('mouseover', () => {
         marker.hoverTimeout = setTimeout(() => {
-          marker.bindTooltip(site.id, { permanent: false, direction: "top" }).openTooltip();
+          marker.bindTooltip(site.id, { permanent: false, direction: 'top' }).openTooltip();
         }, 1000);
       });
 
@@ -170,37 +150,21 @@
         marker.closeTooltip();
       });
 
-      markerMap[site.id] = marker;
       return marker;
     }
 
-    function updateLegend() {
-      const heatmapToggle = document.getElementById('heatmapToggle');
-      const legend = document.getElementById('heatmapLegend');
-      const variable = document.getElementById('heatmapVariable').value;
-      const label = document.getElementById('legendLabel');
-
-      label.textContent = variable.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-
-      legend.style.display = heatmapToggle.checked ? 'block' : 'none';
-    }
-
     function updateHeatmap(data) {
-      const selectedVar = document.getElementById('heatmapVariable').value;
-
-      const values = data
-        .map(d => parseFloat(d[selectedVar]))
-        .filter(v => !isNaN(v));
+      const variable = document.getElementById('heatmapVariable').value;
+      const values = data.map(d => parseFloat(d[variable])).filter(v => !isNaN(v));
       const min = Math.min(...values);
       const max = Math.max(...values);
 
-      const points = data.map(site => {
-        const lat = parseFloat(site.latitude);
-        const lon = parseFloat(site.longitude);
-        const raw = parseFloat(site[selectedVar]);
-        if (!isNaN(lat) && !isNaN(lon) && !isNaN(raw)) {
-          const intensity = (raw - min) / (max - min);
-          return [lat, lon, intensity];
+      const points = data.map(d => {
+        const lat = parseFloat(d.latitude);
+        const lon = parseFloat(d.longitude);
+        const val = parseFloat(d[variable]);
+        if (!isNaN(lat) && !isNaN(lon) && !isNaN(val)) {
+          return [lat, lon, (val - min) / (max - min)];
         }
         return null;
       }).filter(p => p);
@@ -213,46 +177,43 @@
         gradient: { 0.0: 'blue', 0.5: 'lime', 0.75: 'yellow', 1.0: 'red' }
       });
 
-      if (document.getElementById('heatmapToggle').checked) {
-        heatLayer.addTo(map);
-      }
-
-      updateLegend();
+      if (document.getElementById('heatmapToggle').checked) heatLayer.addTo(map);
     }
 
-    function updateMapAndTable() {
+    function applyFilters() {
       const species = document.getElementById('speciesFilter').value;
       const elevation = document.getElementById('elevationFilter').value;
+      const region = document.getElementById('regionFilter').value;
+      const year = document.getElementById('yearFilter').value;
 
       const filtered = allData.filter(site => {
         return (!species || site.sampled === species) &&
-               (!elevation || site.site === elevation);
+               (!elevation || site.site === elevation) &&
+               (!region || site.region === region) &&
+               (!year || (site.date && site.date.endsWith(year)));
       });
 
       clusterGroup.clearLayers();
-      const newMarkers = filtered.map(createMarker).filter(m => m);
-      allMarkers = newMarkers;
-      clusterGroup.addLayers(newMarkers);
-      updateHeatmap(filtered);
+      const markers = filtered.map(createMarker).filter(m => m);
+      clusterGroup.addLayers(markers);
 
+      updateHeatmap(filtered);
       dataTable.clear();
       dataTable.rows.add(filtered);
       dataTable.draw();
     }
 
     fetch('sites3.csv')
-      .then(response => response.text())
-      .then(csvText => {
-        Papa.parse(csvText, {
+      .then(r => r.text())
+      .then(csv => {
+        Papa.parse(csv, {
           header: true,
           skipEmptyLines: true,
           complete: function(results) {
             allData = results.data;
-
-            allMarkers = allData.map(createMarker).filter(m => m);
-            clusterGroup.addLayers(allMarkers);
+            const markers = allData.map(createMarker).filter(m => m);
+            clusterGroup.addLayers(markers);
             map.addLayer(clusterGroup);
-
             updateHeatmap(allData);
 
             dataTable = $('#dataTable').DataTable({
@@ -274,23 +235,12 @@
               ]
             });
 
-            $('#dataTable tbody').on('click', 'tr', function () {
-              const rowData = dataTable.row(this).data();
-              const marker = markerMap[rowData.id];
-              if (marker) {
-                map.setView(marker.getLatLng(), 13);
-                marker.openPopup();
-              }
-            });
-
-            document.getElementById('speciesFilter').addEventListener('change', updateMapAndTable);
-            document.getElementById('elevationFilter').addEventListener('change', updateMapAndTable);
-            document.getElementById('heatmapToggle').addEventListener('change', () => {
-              updateHeatmap(dataTable.rows({ search: 'applied' }).data().toArray());
-            });
-            document.getElementById('heatmapVariable').addEventListener('change', () => {
-              updateHeatmap(dataTable.rows({ search: 'applied' }).data().toArray());
-            });
+            document.getElementById('speciesFilter').addEventListener('change', applyFilters);
+            document.getElementById('elevationFilter').addEventListener('change', applyFilters);
+            document.getElementById('regionFilter').addEventListener('change', applyFilters);
+            document.getElementById('yearFilter').addEventListener('change', applyFilters);
+            document.getElementById('heatmapToggle').addEventListener('change', () => updateHeatmap(dataTable.rows({ search: 'applied' }).data().toArray()));
+            document.getElementById('heatmapVariable').addEventListener('change', () => updateHeatmap(dataTable.rows({ search: 'applied' }).data().toArray()));
           }
         });
       });
