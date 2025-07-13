@@ -58,7 +58,17 @@
       <option value="High">High</option>
     </select>
 
-    <label><input type="checkbox" id="heatmapToggle"> Show Soil Moisture Heatmap</label>
+    <label for="heatmapToggle">
+      <input type="checkbox" id="heatmapToggle"> Show Heatmap
+    </label>
+
+    <label for="heatmapVariable">Heatmap Variable:</label>
+    <select id="heatmapVariable">
+      <option value="soil_moisture">Soil Moisture</option>
+      <option value="soil_temp">Soil Temp</option>
+      <option value="soil_ph">Soil pH</option>
+      <option value="elevation">Elevation</option>
+    </select>
   </div>
 
   <div id="table-container">
@@ -138,11 +148,24 @@
     }
 
     function updateHeatmap(data) {
+      const selectedVar = document.getElementById('heatmapVariable').value;
+
+      // Normalize values
+      const values = data
+        .map(d => parseFloat(d[selectedVar]))
+        .filter(v => !isNaN(v));
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+
       const points = data.map(site => {
         const lat = parseFloat(site.latitude);
         const lon = parseFloat(site.longitude);
-        const intensity = parseFloat(site.soil_moisture);
-        return (!isNaN(lat) && !isNaN(lon) && !isNaN(intensity)) ? [lat, lon, intensity] : null;
+        const raw = parseFloat(site[selectedVar]);
+        if (!isNaN(lat) && !isNaN(lon) && !isNaN(raw)) {
+          const intensity = (raw - min) / (max - min);  // normalize to [0, 1]
+          return [lat, lon, intensity];
+        }
+        return null;
       }).filter(p => p);
 
       if (heatLayer) map.removeLayer(heatLayer);
@@ -150,11 +173,12 @@
         radius: 25,
         blur: 15,
         maxZoom: 13,
-        gradient: { 0.2: 'blue', 0.4: 'lime', 0.6: 'yellow', 1.0: 'red' }
+        gradient: { 0.0: 'blue', 0.5: 'lime', 0.75: 'yellow', 1.0: 'red' }
       });
 
-      const show = document.getElementById('heatmapToggle').checked;
-      if (show) heatLayer.addTo(map);
+      if (document.getElementById('heatmapToggle').checked) {
+        heatLayer.addTo(map);
+      }
     }
 
     function updateMapAndTable() {
@@ -223,6 +247,9 @@
             document.getElementById('speciesFilter').addEventListener('change', updateMapAndTable);
             document.getElementById('elevationFilter').addEventListener('change', updateMapAndTable);
             document.getElementById('heatmapToggle').addEventListener('change', () => {
+              updateHeatmap(dataTable.rows({ search: 'applied' }).data().toArray());
+            });
+            document.getElementById('heatmapVariable').addEventListener('change', () => {
               updateHeatmap(dataTable.rows({ search: 'applied' }).data().toArray());
             });
           }
