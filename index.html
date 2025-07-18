@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Wind River Sampling Map (Debug)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css" />
+
+  <style>
+    body, html {margin:0; padding:0; height:100%; font-family:sans-serif;}
+    #map {height:65vh;}
+    #controls {padding:10px 20px; background:#f4f4f4; border-bottom:1px solid #ccc; display:flex; flex-wrap:wrap; gap:10px;}
+    #table-container {padding:20px;}
+    label {margin-right:5px;}
+    select, input[type="checkbox"] {margin-right:10px;}
+    .legend {position:absolute; bottom:85px; left:10px; z-index:1000; background:white; padding:6px; border:1px solid #ccc; font-size:12px; line-height:1.5;}
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="controls">
+    <label for="speciesFilter">Species:</label>
+    <select id="speciesFilter"><option value="">All</option><option value="Lodgepole Pine">Lodgepole Pine</option><option value="Aspen">Aspen</option><option value="Meadow">Meadow</option></select>
+    <label for="elevationFilter">Elevation:</label>
+    <select id="elevationFilter"><option value="">All</option><option value="Low">Low</option><option value="Mid">Mid</option><option value="High">High</option></select>
+    <label for="regionFilter">Region:</label>
+    <select id="regionFilter"><option value="">All</option><option value="WC">WC</option><option value="NW">NW</option><option value="SW">SW</option></select>
+    <label for="yearFilter">Year:</label>
+    <select id="yearFilter"><option value="">All</option><option value="24">2024</option><option value="25">2025</option></select>
+    <label><input type="checkbox" id="heatmapToggle"> Show Heatmap</label>
+    <label for="heatmapVariable">Variable:</label>
+    <select id="heatmapVariable"><option value="soil_moisture">Soil Moisture</option><option value="soil_temp">Soil Temp</option><option value="soil_ph">Soil pH</option><option value="elevation">Elevation</option></select>
+    <label><input type="checkbox" id="krigingToggle"> Show Kriging</label>
+  </div>
+  <div id="table-container">
+    <table id="dataTable" class="display"></table>
+  </div>
+  <div class="legend"><strong>Heatmap Scale</strong><br><span style="color:blue">Low</span> — <span style="color:red">High</span></div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+  <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
+  <script src="libs/kriging.js"></script>
+
+  <script>
+    console.log('✅ index.html loaded');
+    console.log('typeof kriging:', typeof kriging);
+
+    const map = L.map('map').setView([42.7, -109.3], 9);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+
+    const icons = {
+      'Lodgepole Pine': L.icon({ iconUrl: 'icons/lp.png', iconSize:[48,55], iconAnchor:[24,55] }),
+      'Aspen': L.icon({ iconUrl: 'icons/asp.png', iconSize:[48,55], iconAnchor:[24,55] }),
+      'Meadow': L.icon({ iconUrl: 'icons/medo.png', iconSize:[48,55], iconAnchor:[24,55] })
+    };
+
+    let allData = [], clusterGroup = L.markerClusterGroup(), heatLayer, krigingOverlay, markerMap={}, dataTable;
+
+    function createMarker(site){
+      const lat = parseFloat(site.latitude), lon = parseFloat(site.longitude);
+      if(isNaN(lat)||isNaN(lon)) return null;
+      const icon = icons[site.sampled] || L.Icon.Default;
+      const marker = L.marker([lat,lon],{icon}).bindPopup(`<b>${site.id}</b><br>Species: ${site.sampled}<br>Elevation: ${site.elevation}`);
+      markerMap[site.id] = marker; return marker;
+    }
+
+    function updateHeatmap(data){
+      const variable = document.getElementById('heatmapVariable').value;
+      const values = data.map(d=>parseFloat(d[variable])).filter(v=>!isNaN(v));
+      if(values.length===0) return;
+      const min = Math.min(...values), max = Math.max(...values);
+      const points = data.map(d=>{const lat=parseFloat(d.latitude), lon=parseFloat(d.longitude), val=parseFloat(d[variable]); if(!isNaN(lat)&&!isNaN(lon)&&!isNaN(val)){return [lat,lon,(val-min)/(max-min)];}return null;}).filter(p=>p);
+      if(heatLayer) map.removeLayer(heatLayer);
+      heatLayer = L.heatLayer(points,{radius:40,blur:25,maxZoom:13,gradient:{0.0:'blue',0.5:'lime',0.75:'yellow',1.0:'red'}});
+      if(document.getElementById('heatmapToggle').checked) heatLayer.addTo(map);
+    }
+
+    function updateKriging(data){
+      const variable = document.getElementById('heatmapVariable').value;
+      const t=[],x=[],y=[];
+      data.forEach(d=>{const lat=parseFloat(d.latitude),lon=parseFloat(d.longitude),val=parseFloat(d[variable]);if(!isNaN(lat)&&!isNaN(lon)&&!isNaN(val)){t.push(val);x.push(lon);y.push(lat);}});
+      console.log('▶️ Kriging points count:',t.length,'Values:',t);
+      if(t.length<3){console.warn('❌ Not enough points for kriging'); if(krigingOverlay) map.removeLayer(krigingOverlay); return;}
+      const variogram = kriging.train(t,x,y,'exponential',0,100);
+      const bounds = map.getBounds();
+      const bbox = [bounds.getWest(),bounds.getSouth(),bounds.getEast(),bounds.getNorth()];
+      console.log('▶️ bbox:',bbox);
+      const width = map.getSize().x, height = map.getSize().y;
+      const canvas = document.createElement('canvas'); canvas.width=width; canvas.height=height;
+      const cellSize = 0.001; // fixed smaller cell size for testing
+      console.log('▶️ cellSize:',cellSize,'width:',width,'height:',height);
+      const grid = kriging.grid(bbox, variogram, cellSize);
+      console.log('▶️ grid computed');
+      kriging.plot(canvas, grid, [bbox[0],bbox[2]], [bbox[1],bbox[3]], [ [0,'#0000ff'], [0.5,'#00ff00'], [1,'#ff0000'] ]);
+      if(krigingOverlay) map.removeLayer(krigingOverlay);
+      krigingOverlay = L.imageOverlay(canvas.toDataURL(), bounds, {opacity:0.6});
+      if(document.getElementById('krigingToggle').checked) krigingOverlay.addTo(map);
+    }
+
+    function applyFilters(){
+      const species=document.getElementById('speciesFilter').value,
+            elevation=document.getElementById('elevationFilter').value,
+            region=document.getElementById('regionFilter').value,
+            year=document.getElementById('yearFilter').value;
+      const filtered=allData.filter(site=>{
+        return(!species||site.sampled===species)&&(!elevation||site.site===elevation)&&(!region||site.region===region)&&(!year||(site.date&&site.date.endsWith(year)));
+      });
+      clusterGroup.clearLayers();
+      clusterGroup.addLayers(filtered.map(createMarker).filter(m=>m));
+      updateHeatmap(filtered); updateKriging(filtered);
+      dataTable.clear(); dataTable.rows.add(filtered); dataTable.draw();
+    }
+
+    fetch('sites3.csv').then(r=>r.text()).then(csv=>{
+      Papa.parse(csv,{header:true,skipEmptyLines:true,complete:function(results){
+        allData=results.data;
+        clusterGroup.addLayers(allData.map(createMarker).filter(m=>m)); map.addLayer(clusterGroup);
+        updateHeatmap(allData); updateKriging(allData);
+        dataTable=$('#dataTable').DataTable({data:allData,columns:[
+          {title:"ID",data:"id"},{title:"Region",data:"region"},{title:"Elevation Site",data:"site"},{title:"Date",data:"date"},{title:"Time",data:"time"},{title:"Species",data:"sampled"},{title:"CBH",data:"cbh"},{title:"Latitude",data:"latitude"},{title:"Longitude",data:"longitude"},{title:"Elevation",data:"elevation"},{title:"Soil Temp",data:"soil_temp"},{title:"Soil Moisture",data:"soil_moisture"},{title:"Soil pH",data:"soil_ph"}
+        ]});
+        document.getElementById('speciesFilter').addEventListener('change',applyFilters);
+        document.getElementById('elevationFilter').addEventListener('change',applyFilters);
+        document.getElementById('regionFilter').addEventListener('change',applyFilters);
+        document.getElementById('yearFilter').addEventListener('change',applyFilters);
+        document.getElementById('heatmapToggle').addEventListener('change',()=>{updateHeatmap(dataTable.rows({search:'applied'}).data().toArray());});
+        document.getElementById('heatmapVariable').addEventListener('change',()=>{
+          const cur=dataTable.rows({search:'applied'}).data().toArray(); updateHeatmap(cur); updateKriging(cur);
+        });
+        document.getElementById('krigingToggle').addEventListener('change',()=>{updateKriging(dataTable.rows({search:'applied'}).data().toArray());});
+      }});
+    });
+  </script>
+</body>
+</html>
